@@ -11,8 +11,10 @@ Ver [`frame.md`](./frame.md) para el problema y el outcome.
 | ID | Requirement | Status |
 |----|-------------|--------|
 | R0 | Dos personas juegan por voz a citar frases de una misma película, en vivo | Core goal |
-| R1 | El clip se entiende sin audio y sin que nadie explique las reglas | Must-have |
-| R2 | La partida deja un artefacto compartible sin filmar ni editar nada | Must-have |
+| 🟡 R1 | **El resultado circula solo** | Must-have |
+| 🟡 R1.1 | El clip se entiende sin audio y sin que nadie explique las reglas | Must-have |
+| 🟡 R1.2 | La partida deja un artefacto compartible sin filmar ni editar nada | Must-have |
+| 🟡 R2 | Se juega y se habla en el mismo lugar: un link y estás adentro | Must-have |
 | R3 | Construible en el orden de un día, no de una semana | Must-have |
 | R4 | La tensión crece a lo largo de la partida en vez de reiniciarse en cada turno | Must-have |
 | R5 | Los dos navegadores muestran el mismo estado sin que ninguno sea árbitro | Must-have |
@@ -22,7 +24,10 @@ Ver [`frame.md`](./frame.md) para el problema y el outcome.
 
 **Notas sobre el origen de las R:**
 
-- R1, R2 y R3 son criterios que la usuaria fijó explícitamente antes de elegir la idea.
+- R1 y R3 son criterios que la usuaria fijó explícitamente antes de elegir la idea.
+- 🟡 R2 apareció tarde, mirando el juego construido: la usuaria esperaba conectarse a una
+  llamada dentro de la app, no abrir una llamada aparte. El diseño original ponía el juego
+  *al lado* de Discord o Meet, y eso nunca se había dicho en voz alta.
 - R4 salió de reemplazar el reloj por turno (shape C) por la bomba global (shape D).
 - R6 apareció al decidir que un loop automático de 4 horas tiene que poder verificar el
   producto: ninguna máquina le habla a un micrófono.
@@ -89,6 +94,11 @@ no satisface ninguna R más allá de la conexión.
 | D5.1 | Bomba con mecha consumiéndose arriba, idéntica en las dos pantallas | |
 | D5.2 | Turno activo, vidas restantes y marcador siempre visibles | |
 | D5.3 | La frase acertada aparece en pantalla; paleta tematizada con la película | |
+| **D7** | **Llamada de audio en la misma pantalla** | |
+| D7.1 | WebRTC lleva el audio punto a punto; Portal lleva sólo la señalización — oferta, respuesta y candidatos ICE | |
+| D7.2 | Sólo audio: el SDP de audio mide ~1.2 KB y entra en el límite de 2 KB de Portal sin partirlo. Con video sube a ~5.7 KB y haría falta fragmentar y rearmar | |
+| D7.3 | Cancelación de eco activada en la captura: la voz del otro sale por los parlantes y el reconocedor propio podría atribuirla al dueño del micrófono | |
+| D7.4 | Sin TURN. STUN público conecta a la mayoría; las redes con NAT simétrico no van a conectar y hay que decirlo en pantalla | ⚠️ |
 | **D6** | **Cierre de partida** | |
 | D6.1 | Tablero final con todas las frases dichas, atribuidas a cada jugador | |
 | D6.2 | Exportar el tablero como imagen descargable | ⚠️ |
@@ -100,8 +110,8 @@ no satisface ninguna R más allá de la conexión.
 | Req | Requirement | Status | CURRENT | C | D |
 |-----|-------------|--------|:-------:|:-:|:-:|
 | R0 | Dos personas juegan por voz a citar frases de una misma película, en vivo | Core goal | ❌ | ✅ | ✅ |
-| R1 | El clip se entiende sin audio y sin que nadie explique las reglas | Must-have | ❌ | ❌ | ✅ |
-| R2 | La partida deja un artefacto compartible sin filmar ni editar nada | Must-have | ❌ | ❌ | ✅ |
+| R1 | El resultado circula solo (clip legible + artefacto sin editar) | Must-have | ❌ | ❌ | ✅ |
+| 🟡 R2 | Se juega y se habla en el mismo lugar: un link y estás adentro | Must-have | ❌ | ❌ | ❌ |
 | R3 | Construible en el orden de un día, no de una semana | Must-have | ✅ | ✅ | ✅ |
 | R4 | La tensión crece a lo largo de la partida en vez de reiniciarse en cada turno | Must-have | ❌ | ❌ | ✅ |
 | R5 | Los dos navegadores muestran el mismo estado sin que ninguno sea árbitro | Must-have | ❌ | ❌ | ✅ |
@@ -122,6 +132,11 @@ no satisface ninguna R más allá de la conexión.
 - **D pasa R2 con D6.1 solo.** D6.2 está marcado ⚠️ y por eso no puede sostener ninguna
   ✅, pero el tablero final en pantalla ya satisface el requisito: se captura y se
   comparte sin editar.
+
+🟡 **D falla R2 hoy.** El diseño original dejaba la voz a una llamada aparte, y D7 es la parte
+que lo corrige. Mientras D7.4 siga marcada, D no puede reclamar ✅ en R2: sin TURN hay
+combinaciones de red que no conectan, y un mecanismo que no cubre su caso no satisface un
+requisito.
 
 **Shape seleccionada: D.**
 
