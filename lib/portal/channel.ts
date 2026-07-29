@@ -2,7 +2,29 @@ import type { Message } from "@portalsdk/core";
 import type { GameEvent, GameEventBody } from "@/lib/engine/types";
 
 /** Por ahora una sola sala. Salas con link compartible están fuera de alcance. */
-export const CHANNEL_ID = "emperador-bomba";
+export const DEFAULT_CHANNEL_ID = "emperador-bomba";
+
+/**
+ * Resuelve contra qué canal jugar.
+ *
+ * En producción siempre es el canal fijo. Sólo cuando el build se marcó como de
+ * pruebas se acepta `?canal=`, porque sembrar más de cincuenta mensajes sobre el
+ * canal real lo dejaría sucio para siempre y cada corrida lo empeoraría.
+ *
+ * La bandera es de build, no de runtime, justamente para que el mecanismo no
+ * exista en el bundle que usa la gente: la barra de direcciones también es una
+ * interfaz, y esto no es la funcionalidad de salas compartibles.
+ *
+ * Devuelve `undefined` durante el render en servidor, que es lo que `useChannel`
+ * espera para no abrir conexión.
+ */
+export function channelIdFromLocation(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  if (process.env.NEXT_PUBLIC_E2E !== "1") return DEFAULT_CHANNEL_ID;
+
+  const requested = new URLSearchParams(window.location.search).get("canal");
+  return requested?.trim() || DEFAULT_CHANNEL_ID;
+}
 
 /** Lo que viaja en `content`. El texto va crudo: el matching es del motor. */
 export type GameMessage = Message<GameEventBody>;

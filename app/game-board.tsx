@@ -6,7 +6,8 @@ import { deriveGameState } from "@/lib/engine/derive";
 import { isExpired } from "@/lib/engine/fuse";
 import type { GameEventBody } from "@/lib/engine/types";
 import { CATALOG, DEFAULT_MOVIE_ID } from "@/lib/movies";
-import { CHANNEL_ID, toGameEvents } from "@/lib/portal/channel";
+import { channelIdFromLocation, toGameEvents } from "@/lib/portal/channel";
+import { useDrainedHistory } from "@/lib/portal/use-drained-history";
 import { Lobby } from "./lobby";
 import { Round } from "./round";
 
@@ -26,11 +27,35 @@ export function GameBoard() {
   // Volver a la sala es una decisión de esta pantalla, no un hecho del canal:
   // la otra persona sigue mirando el resultado hasta que arranque la partida.
   const [backToLobby, setBackToLobby] = useState(false);
+  // Se resuelve una vez, al montar. El servidor no ve la URL del navegador, así
+  // que ahí queda `undefined` y `useChannel` no abre conexión.
+  const [channelId] = useState(channelIdFromLocation);
 
-  const { messages, send, presence, me, status } = useChannel<GameEventBody>({
-    channelId: CHANNEL_ID,
+  const {
+    messages,
+    send,
+    presence,
+    me,
+    status,
+    loadPrevious,
+    hasPrevious,
+    isLoadingPrevious,
+  } = useChannel<GameEventBody>({
+    channelId,
     history: 50,
     onError: (channelError) => setError(channelError.message),
+  });
+
+  const {
+    drained,
+    incomplete: historyIncomplete,
+    error: historyError,
+  } = useDrainedHistory({
+    hasPrevious,
+    isLoadingPrevious,
+    loadPrevious,
+    messages,
+    enabled: channelId !== undefined,
   });
 
   const events = useMemo(() => toGameEvents(messages), [messages]);
@@ -98,11 +123,40 @@ export function GameBoard() {
   const presenceCount = presence?.count;
   const movie = state.movieId ? CATALOG[state.movieId] : null;
 
-  const banner = error ? (
-    <p className="mx-auto max-w-xl rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-400">
-      {error}
-    </p>
-  ) : null;
+  const shown = error ?? historyError;
+  const banner = (
+    <>
+      {shown && (
+        <p className="mx-auto max-w-xl rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-400">
+          {shown}
+        </p>
+      )}
+      {historyIncomplete && (
+        // Con historial faltante lo que se ve puede no ser la partida real. Se
+        // muestra igual — colgarse cargando sería peor — pero se dice.
+        <p className="mx-auto max-w-xl rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+          No se pudo traer el historial completo. Lo que ves puede no coincidir
+          con la otra pantalla.
+        </p>
+      )}
+    </>
+  );
+
+  // Nada de juego hasta tener el historial completo. Derivar sobre un backfill
+  // parcial no da una partida incompleta: da otra partida. Quien entrara tarde
+  // vería la sala de espera mientras el otro juega, o un marcador que no existe.
+  if (!drained) {
+    return (
+      <div className="m-auto flex flex-col items-center gap-2 p-6 text-center">
+        {banner}
+        <p className="font-mono text-sm text-neutral-500">
+          {status === "blocked"
+            ? "El canal rechazó la conexión."
+            : "Trayendo la partida…"}
+        </p>
+      </div>
+    );
+  }
 
   if (state.phase === "waiting" || (state.phase === "over" && backToLobby)) {
     return (
