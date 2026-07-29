@@ -5,9 +5,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deriveGameState } from "@/lib/engine/derive";
 import { isExpired } from "@/lib/engine/fuse";
 import type { GameEventBody } from "@/lib/engine/types";
+import { isSignalBody, type SignalBody } from "@/lib/rtc/signal";
+import { useAudioCall } from "@/lib/rtc/use-audio-call";
 import { CATALOG, DEFAULT_MOVIE_ID } from "@/lib/movies";
 import { channelIdFromLocation, toGameEvents } from "@/lib/portal/channel";
 import { useDrainedHistory } from "@/lib/portal/use-drained-history";
+import { CallBar } from "./call-bar";
 import { Lobby } from "./lobby";
 import { Round } from "./round";
 
@@ -40,7 +43,7 @@ export function GameBoard() {
     loadPrevious,
     hasPrevious,
     isLoadingPrevious,
-  } = useChannel<GameEventBody>({
+  } = useChannel<GameEventBody | SignalBody>({
     channelId,
     history: 50,
     onError: (channelError) => setError(channelError.message),
@@ -63,13 +66,29 @@ export function GameBoard() {
   });
 
   const events = useMemo(() => toGameEvents(messages), [messages]);
+
+  // Las ofertas viejas del historial no sirven: describen una conexión que ya no
+  // existe. Sólo cuenta lo publicado después de que esta pantalla se abrió.
+  const [openedAt] = useState(() => Date.now());
+  const signals = useMemo(
+    () =>
+      messages
+        .filter((m) => m.timestamp >= openedAt && isSignalBody(m.content))
+        .map((m) => ({
+          id: m.id,
+          timestamp: m.timestamp,
+          from: m.sender.id,
+          body: m.content as SignalBody,
+        })),
+    [messages, openedAt],
+  );
   const state = useMemo(
     () => deriveGameState(events, now, CATALOG),
     [events, now],
   );
 
   const publish = useCallback(
-    async (body: GameEventBody) => {
+    async (body: GameEventBody | SignalBody) => {
       setPending(true);
       setError(null);
       try {
@@ -120,6 +139,14 @@ export function GameBoard() {
     }, TICK_MS);
     return () => clearInterval(id);
   }, [publish]);
+
+  const peerId = state.players.find((player) => player !== me?.id);
+  const call = useAudioCall({
+    meId: me?.id,
+    peerId,
+    signals,
+    publish,
+  });
 
   // El modo de presencia lo decide el servidor. En canales grandes devuelve sólo
   // un conteo, sin identidades — y sin identidades no se puede elegir rival.
@@ -227,6 +254,9 @@ export function GameBoard() {
   return (
     <div className="flex flex-1 flex-col">
       {banner}
+      <div className="mx-auto w-full max-w-xl px-6 pt-6">
+        <CallBar call={call} />
+      </div>
       <Round
         state={state}
         movie={movie}

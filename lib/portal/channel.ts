@@ -26,8 +26,14 @@ export function channelIdFromLocation(): string | undefined {
   return requested?.trim() || DEFAULT_CHANNEL_ID;
 }
 
-/** Lo que viaja en `content`. El texto va crudo: el matching es del motor. */
-export type GameMessage = Message<GameEventBody>;
+/**
+ * Un mensaje del canal, sin suponer nada de su contenido.
+ *
+ * El canal lleva dos cosas: eventos de partida y señalización de la llamada. El
+ * tipo no distingue porque la distinción es de runtime — `isGameEventBody` es
+ * quien decide qué es un evento del juego, y todo lo demás se descarta.
+ */
+export type GameMessage = Message<unknown>;
 
 function isGameEventBody(content: unknown): content is GameEventBody {
   if (typeof content !== "object" || content === null) return false;
