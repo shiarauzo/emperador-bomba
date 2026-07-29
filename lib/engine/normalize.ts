@@ -18,6 +18,16 @@ export function normalize(text: string): string {
     .trim();
 }
 
+/**
+ * Mínimo de palabras que puede tener una frase del dataset.
+ *
+ * No es una preferencia de estilo: una frase de una o dos palabras matchearía
+ * con casi cualquier cosa que se diga. Los tests del dataset lo verifican, y el
+ * reconocimiento de voz se apoya en esta garantía para descartar lo que se dice
+ * de paso sin poder perderse una frase válida.
+ */
+export const MIN_QUOTE_WORDS = 4;
+
 /** Cantidad de palabras de una frase ya normalizada. */
 export function wordCount(text: string): number {
   const normalized = normalize(text);

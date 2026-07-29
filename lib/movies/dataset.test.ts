@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalize, wordCount } from "@/lib/engine/normalize";
+import { MIN_QUOTE_WORDS, normalize, wordCount } from "@/lib/engine/normalize";
 import { MOVIES } from "./index";
 
 describe.each(MOVIES)("dataset de $title", (movie) => {
@@ -8,8 +8,8 @@ describe.each(MOVIES)("dataset de $title", (movie) => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("ninguna frase baja de cuatro palabras", () => {
-    const cortas = movie.quotes.filter((q) => wordCount(q.text) < 4);
+  it("ninguna frase baja del mínimo de palabras", () => {
+    const cortas = movie.quotes.filter((q) => wordCount(q.text) < MIN_QUOTE_WORDS);
     expect(cortas.map((q) => q.text)).toEqual([]);
   });
 

@@ -86,7 +86,9 @@ no satisface ninguna R más allá de la conexión.
 | D2.3 | Si los dos clientes detectan la explosión a la vez y ambos publican, la derivación toma el de `seq` más bajo e ignora el resto | |
 | **D3** | **Adaptador de voz** | |
 | D3.1 | Web Speech API con `lang: es-419`, modo continuo, relanzado desde `onend` porque Chrome corta a los ~60 s de silencio | |
-| D3.2 | Toda la entrada pasa por `submitPhrase(text)`; el adaptador de voz es su único llamador en producción y los tests lo llaman directo | |
+| D3.2 | Toda la entrada pasa por `submitPhrase(text)`; la voz y la caja de texto son sus dos llamadores, y las pruebas usan la caja porque el micrófono no se automatiza | |
+| 🟡 D3.3 | Se escucha sólo en tu turno, y se descarta lo más corto que la frase más corta del dataset. No es matching en el cliente: el motor sigue decidiendo los aciertos. Es una compuerta de ruido, y hace falta porque con la llamada abierta el micrófono capta todo el tiempo — sin ella, cada "ajá" quedaría publicado y guardado para siempre en el canal | |
+| 🟡 D3.4 | La cancelación de eco de D7.3 **no cubre al reconocedor**: `SpeechRecognition` abre su propia captura y no acepta el stream de la llamada. Con parlantes, la frase del otro puede transcribirse y publicarse como tuya. Con auriculares desaparece | ⚠️ |
 | **D4** | **Dataset** | |
 | D4.1 | Frases agrupadas por película en una estructura de datos; sumar una película es agregar una entrada | |
 | D4.2 | Normalización compartida por dataset y transcripción: minúsculas, sin acentos, sin puntuación, espacios colapsados | |

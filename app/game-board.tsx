@@ -149,6 +149,20 @@ export function GameBoard() {
   // así que es a quien elegiste — y ahí es cuando más falta hace hablar, para
   // ponerse de acuerdo en empezar.
   const [chosenPeer, setChosenPeer] = useState<string | null>(null);
+  /**
+   * La única puerta por la que entra una jugada.
+   *
+   * La caja de texto y el reconocimiento de voz llaman acá; nada más publica
+   * frases. Tenerla con nombre es lo que hace verificable la promesa de que la
+   * voz no es un segundo camino hacia el motor.
+   */
+  const submitPhrase = useCallback(
+    (text: string) => {
+      void publish({ kind: "say", text });
+    },
+    [publish],
+  );
+
   const peerId =
     state.players.find((player) => player !== me?.id) ?? chosenPeer ?? undefined;
   const call = useAudioCall({
@@ -278,7 +292,7 @@ export function GameBoard() {
         movie={movie}
         meId={me?.id}
         pending={pending}
-        onSay={(text) => void publish({ kind: "say", text })}
+        onSay={submitPhrase}
       />
     </div>
   );
