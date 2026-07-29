@@ -1,9 +1,9 @@
+import { GameBoard } from "./game-board";
+
 export default function Home() {
   return (
-    <main className="m-auto p-6 text-center">
-      <h1 className="font-mono text-lg font-semibold tracking-tight">
-        Las locuras del emperador — bomba
-      </h1>
+    <main className="flex min-h-0 flex-1">
+      <GameBoard />
     </main>
   );
 }
