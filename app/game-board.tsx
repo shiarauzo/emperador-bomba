@@ -23,6 +23,9 @@ export function GameBoard() {
   const [now, setNow] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Volver a la sala es una decisión de esta pantalla, no un hecho del canal:
+  // la otra persona sigue mirando el resultado hasta que arranque la partida.
+  const [backToLobby, setBackToLobby] = useState(false);
 
   const { messages, send, presence, me, status } = useChannel<GameEventBody>({
     channelId: CHANNEL_ID,
@@ -64,9 +67,15 @@ export function GameBoard() {
   // `now`. La explosión se publica desde acá porque el vencimiento es un hecho
   // del reloj, y este es el lugar donde el reloj avanza.
   //
-  // Las dos pantallas la detectan casi a la vez y las dos publican. No hay que
-  // evitarlo: la primera por `seq` abre la mecha nueva y la segunda se evalúa
+  // Las dos pantallas la detectan casi a la vez y las dos publican. Eso está
+  // previsto: la primera por `seq` abre la mecha nueva y la segunda se evalúa
   // contra ella, todavía fresca, así que el motor la descarta sola.
+  //
+  // Lo que sí hay que evitar es republicarla en cada tick. La explosión propia
+  // viaja sin confirmar, el adaptador la deja afuera hasta el ack, y mientras
+  // tanto la mecha sigue leyéndose vencida: sin esta marca se publicaría una
+  // explosión cada 200 ms durante todo el viaje de ida y vuelta.
+  const boomedFuse = useRef<number | null>(null);
   useEffect(() => {
     const id = setInterval(() => {
       const at = Date.now();
@@ -75,12 +84,18 @@ export function GameBoard() {
       const current = latest.current;
       if (current.phase !== "playing" || !current.fuse) return;
       if (!isExpired(current.fuse.openedAt, current.fuse.duration, at)) return;
+      if (boomedFuse.current === current.fuse.openedAt) return;
+
+      boomedFuse.current = current.fuse.openedAt;
       void publish({ kind: "boom" });
     }, TICK_MS);
     return () => clearInterval(id);
   }, [publish]);
 
+  // El modo de presencia lo decide el servidor. En canales grandes devuelve sólo
+  // un conteo, sin identidades — y sin identidades no se puede elegir rival.
   const roster = presence?.kind === "detailed" ? presence : undefined;
+  const presenceCount = presence?.count;
   const movie = state.movieId ? CATALOG[state.movieId] : null;
 
   const banner = error ? (
@@ -89,13 +104,14 @@ export function GameBoard() {
     </p>
   ) : null;
 
-  if (state.phase === "waiting") {
+  if (state.phase === "waiting" || (state.phase === "over" && backToLobby)) {
     return (
       <div className="flex flex-1 flex-col">
         {banner}
         <Lobby
           status={status}
           roster={roster}
+          presenceCount={presenceCount}
           meId={me?.id}
           onStart={(players) =>
             void publish({
@@ -110,16 +126,37 @@ export function GameBoard() {
   }
 
   if (state.phase === "over") {
-    const iWon = state.winner === me?.id;
+    // Sólo se puede decir "ganaste" o "perdiste" a quien jugó. Sin identidad
+    // todavía, o mirando una partida ajena, se nombra al ganador y listo:
+    // afirmar mal el resultado es peor que no afirmarlo.
+    const played = me !== undefined && state.players.includes(me.id);
+    const outcome = !played
+      ? `Ganó ${state.winner?.slice(-6) ?? "nadie"}`
+      : state.winner === me.id
+        ? "Ganaste"
+        : "Perdiste";
+
     return (
       <div className="m-auto flex w-full max-w-sm flex-col gap-4 p-6 text-center">
         {banner}
         <h1 className="font-mono text-lg font-semibold tracking-tight">
-          {iWon ? "Ganaste" : "Perdiste"}
+          {outcome}
         </h1>
         <p className="text-sm text-neutral-500">
           {state.said.length} frases en {state.round} rondas.
         </p>
+        {/* El tablero completo es del ticket del final de partida. Volver a la
+            sala está acá porque sin salida el canal queda terminal para todos.
+            Y se vuelve a la sala en vez de repetir los mismos jugadores: la
+            identidad anónima puede haber rotado, y rearmar la partida con los
+            ids viejos la dejaría entre dos ausentes. */}
+        <button
+          type="button"
+          onClick={() => setBackToLobby(true)}
+          className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background"
+        >
+          Otra partida
+        </button>
       </div>
     );
   }

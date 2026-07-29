@@ -123,9 +123,11 @@ export function Round({
           }
           className="flex-1 rounded-lg border border-black/10 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/30 dark:border-white/15 dark:focus:border-white/40"
         />
+        {/* Fuera de turno el motor descarta la frase en silencio. Bloquear el
+            envío hace visible la regla en vez de tragarse lo que escribiste. */}
         <button
           type="submit"
-          disabled={!draft.trim()}
+          disabled={!draft.trim() || !myTurn}
           className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-40"
         >
           {pending ? "…" : "Decir"}

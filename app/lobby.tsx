@@ -29,11 +29,13 @@ const STATUS_LABEL: Record<ChannelStatus, string> = {
 export function Lobby({
   status,
   roster,
+  presenceCount,
   meId,
   onStart,
 }: {
   status: ChannelStatus;
   roster: DetailedPresence | undefined;
+  presenceCount: number | undefined;
   meId: string | undefined;
   onStart: (players: string[]) => void;
 }) {
@@ -62,7 +64,14 @@ export function Lobby({
           {meId && ` · sos ${meId.slice(-6)}`}
         </span>
 
-        {others.length === 0 ? (
+        {!roster && presenceCount !== undefined ? (
+          // El servidor eligió el modo agregado: hay un conteo pero no
+          // identidades, y sin identidades no se puede armar la partida.
+          <p className="text-sm text-neutral-500">
+            {presenceCount} conectados, pero este canal no informa quién. No se
+            puede elegir rival.
+          </p>
+        ) : others.length === 0 ? (
           <p className="text-sm text-neutral-500">
             Nadie más en la sala. Abrí el juego en otro navegador.
           </p>

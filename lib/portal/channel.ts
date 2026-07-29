@@ -26,8 +26,15 @@ function isGameEventBody(content: unknown): content is GameEventBody {
  * requisito de corrección, no una comodidad para reconexiones.
  *
  * Los mensajes propios sin confirmar quedan afuera a propósito. Su lugar final
- * en el orden todavía no está decidido por el servidor, y meterlos dejaría a las
- * dos pantallas mostrando marcadores distintos por unos milisegundos.
+ * en el orden todavía no está decidido por el servidor — y además su `id` es
+ * temporal, así que la duración de la mecha derivada de él cambiaría al llegar
+ * el ack.
+ *
+ * Límite conocido: un mensaje retractado llega con `content: null` y su `status`
+ * intacto, así que desaparece del historial sin dejar rastro. Nada de esta app
+ * retracta, pero si alguna vez se retractara una explosión la mecha no volvería
+ * a abrirse y la partida quedaría trabada. Desde acá no hay forma de recuperar
+ * el contenido.
  */
 export function toGameEvents(messages: readonly GameMessage[]): GameEvent[] {
   const events: GameEvent[] = [];

@@ -146,7 +146,7 @@ interactuar con lo anterior.
 | # | Place | Component | Affordance | Control | Wires Out | Returns To |
 |---|-------|-----------|------------|---------|-----------|------------|
 | U1 | P1 | lobby | dropdown de película | select | → N1 | — |
-| U2 | P1 | lobby | roster de jugadores conectados | render | — | — |
+| U2 | P1 | lobby | roster de conectados, con el rival elegible | click | → N1 | — |
 | U3 | P1 | lobby | botón "Empezar partida" | click | → N2 | — |
 | U4 | P1 | lobby | estado de conexión del canal | render | — | — |
 | U5 | P2 | bomb | mecha consumiéndose | render | — | — |
@@ -332,6 +332,18 @@ flowchart TB
   vería congelada hasta el siguiente mensaje.
 - **N14 escribe al canal leyendo S3**, que es lo que convierte una explosión local en un
   hecho compartido. El desempate por `seq` vive dentro de N5.
+
+**Corregido al implementar (V2):** el roster no define quién juega — quien arranca elige
+rival. Medido contra el canal real, los participantes desconectados siguieron apareciendo
+en la presencia más de noventa segundos antes de expirar, y una partida arrancada contra
+un ausente está perdida de antemano: el turno le pasa, no habla nunca, y la bomba explota
+siempre del mismo lado. Elegir a mano convierte un roster sucio en un inconveniente en vez
+de en un juego roto. El orden de turno sigue viajando en el mensaje de apertura, así que
+la determinación no cambia.
+
+**También corregido en V2:** `start` se acepta sobre una partida terminada, no sólo desde
+la sala de espera. El canal es fijo, así que rechazarlo dejaba el canal muerto para todas
+las pestañas después de la primera partida.
 
 **Corregido al implementar (V1):** N5 recibe además el catálogo de películas — el
 matching ocurre dentro de la derivación, así que las frases tienen que entrar por
