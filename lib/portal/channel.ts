@@ -1,5 +1,6 @@
 import type { Message } from "@portalsdk/core";
 import type { GameEvent, GameEventBody } from "@/lib/engine/types";
+import { isSignalBody, type SignalBody } from "@/lib/rtc/signal";
 
 /** Por ahora una sola sala. Salas con link compartible están fuera de alcance. */
 export const DEFAULT_CHANNEL_ID = "emperador-bomba";
@@ -26,8 +27,14 @@ export function channelIdFromLocation(): string | undefined {
   return requested?.trim() || DEFAULT_CHANNEL_ID;
 }
 
-/** Lo que viaja en `content`. El texto va crudo: el matching es del motor. */
-export type GameMessage = Message<GameEventBody>;
+/**
+ * Un mensaje del canal, sin suponer nada de su contenido.
+ *
+ * El canal lleva dos cosas: eventos de partida y señalización de la llamada. El
+ * tipo no distingue porque la distinción es de runtime — `isGameEventBody` es
+ * quien decide qué es un evento del juego, y todo lo demás se descarta.
+ */
+export type GameMessage = Message<unknown>;
 
 function isGameEventBody(content: unknown): content is GameEventBody {
   if (typeof content !== "object" || content === null) return false;
@@ -75,4 +82,34 @@ export function toGameEvents(messages: readonly GameMessage[]): GameEvent[] {
   });
 
   return events;
+}
+
+export interface IncomingSignal {
+  id: string;
+  from: string;
+  body: SignalBody;
+}
+
+/**
+ * Extrae la señalización de la llamada que hay en el canal.
+ *
+ * Devuelve todo, sin filtrar por antigüedad. Quién es viejo lo decide quien
+ * consume, por id — no por reloj: comparar un `Date.now()` local contra las
+ * marcas que pone el servidor hace que un cliente adelantado unos segundos
+ * descarte *toda* la señalización y se quede conectando para siempre, sin un
+ * solo error.
+ */
+export function toSignals(messages: readonly GameMessage[]): IncomingSignal[] {
+  const signals: IncomingSignal[] = [];
+
+  for (const message of messages) {
+    if (!isSignalBody(message.content)) continue;
+    signals.push({
+      id: message.id,
+      from: message.sender.id,
+      body: message.content,
+    });
+  }
+
+  return signals;
 }

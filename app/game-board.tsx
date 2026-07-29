@@ -5,9 +5,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deriveGameState } from "@/lib/engine/derive";
 import { isExpired } from "@/lib/engine/fuse";
 import type { GameEventBody } from "@/lib/engine/types";
+import type { SignalBody } from "@/lib/rtc/signal";
+import { useAudioCall } from "@/lib/rtc/use-audio-call";
 import { CATALOG, DEFAULT_MOVIE_ID } from "@/lib/movies";
-import { channelIdFromLocation, toGameEvents } from "@/lib/portal/channel";
+import {
+  channelIdFromLocation,
+  toGameEvents,
+  toSignals,
+} from "@/lib/portal/channel";
 import { useDrainedHistory } from "@/lib/portal/use-drained-history";
+import { CallBar } from "./call-bar";
 import { Lobby } from "./lobby";
 import { Round } from "./round";
 
@@ -40,7 +47,7 @@ export function GameBoard() {
     loadPrevious,
     hasPrevious,
     isLoadingPrevious,
-  } = useChannel<GameEventBody>({
+  } = useChannel<GameEventBody | SignalBody>({
     channelId,
     history: 50,
     onError: (channelError) => setError(channelError.message),
@@ -63,9 +70,26 @@ export function GameBoard() {
   });
 
   const events = useMemo(() => toGameEvents(messages), [messages]);
+
+  const signals = useMemo(() => toSignals(messages), [messages]);
+
   const state = useMemo(
     () => deriveGameState(events, now, CATALOG),
     [events, now],
+  );
+
+  /**
+   * Publicar señalización no es una jugada.
+   *
+   * Compartía camino con las del juego, así que cada candidato ICE ponía el
+   * botón en "…" y limpiaba el cartel de error que la persona estuviera leyendo.
+   * Los fallos de señalización los reporta la barra de llamada, no la partida.
+   */
+  const publishSignal = useCallback(
+    async (body: SignalBody) => {
+      await send({ content: body });
+    },
+    [send],
   );
 
   const publish = useCallback(
@@ -121,6 +145,19 @@ export function GameBoard() {
     return () => clearInterval(id);
   }, [publish]);
 
+  // En partida el rival es el otro jugador. En la sala todavía no hay partida,
+  // así que es a quien elegiste — y ahí es cuando más falta hace hablar, para
+  // ponerse de acuerdo en empezar.
+  const [chosenPeer, setChosenPeer] = useState<string | null>(null);
+  const peerId =
+    state.players.find((player) => player !== me?.id) ?? chosenPeer ?? undefined;
+  const call = useAudioCall({
+    meId: me?.id,
+    peerId,
+    signals,
+    publish: publishSignal,
+  });
+
   // El modo de presencia lo decide el servidor. En canales grandes devuelve sólo
   // un conteo, sin identidades — y sin identidades no se puede elegir rival.
   const roster = presence?.kind === "detailed" ? presence : undefined;
@@ -166,7 +203,13 @@ export function GameBoard() {
     return (
       <div className="flex flex-1 flex-col">
         {banner}
+        {peerId && (
+          <div className="mx-auto w-full max-w-sm px-6 pt-6">
+            <CallBar call={call} />
+          </div>
+        )}
         <Lobby
+          onChooseOpponent={setChosenPeer}
           status={status}
           roster={roster}
           presenceCount={presenceCount}
@@ -227,6 +270,9 @@ export function GameBoard() {
   return (
     <div className="flex flex-1 flex-col">
       {banner}
+      <div className="mx-auto w-full max-w-xl px-6 pt-6">
+        <CallBar call={call} />
+      </div>
       <Round
         state={state}
         movie={movie}

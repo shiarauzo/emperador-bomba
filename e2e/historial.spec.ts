@@ -64,8 +64,13 @@ test.describe("historial completo del canal", () => {
 
     // Sin drenar, el mensaje de arranque queda fuera de la ventana de cincuenta
     // y las dos pantallas mostrarían la sala de espera en vez de la partida.
-    await expect(paginaUno.getByText(/ronda 1/)).toBeVisible();
-    await expect(paginaDos.getByText(/ronda 1/)).toBeVisible();
+    //
+    // Se afirma "hay partida", no "es la ronda 1": la mecha arranca al sembrar y
+    // dura entre 60 y 90 s, así que en una corrida lenta puede explotar antes de
+    // llegar acá. Lo que importa es que las dos pantallas coincidan, y eso se
+    // compara abajo.
+    await expect(paginaUno.getByText(/ronda \d+/)).toBeVisible();
+    await expect(paginaDos.getByText(/ronda \d+/)).toBeVisible();
 
     const tableroUno = await readBoard(paginaUno);
     const tableroDos = await readBoard(paginaDos);
@@ -102,14 +107,14 @@ test.describe("historial completo del canal", () => {
     await openGame(paginaTemprano, channelId);
 
     const seeded = await seedLongMatch(channelId);
-    await expect(paginaTemprano.getByText(/ronda 1/)).toBeVisible();
+    await expect(paginaTemprano.getByText(/ronda \d+/)).toBeVisible();
 
     // Esta lo arma drenando el historial. Son dos caminos de código distintos y
     // tienen que terminar en el mismo estado.
     const tarde = await browser.newContext();
     const paginaTarde = await tarde.newPage();
     await openGame(paginaTarde, channelId);
-    await expect(paginaTarde.getByText(/ronda 1/)).toBeVisible();
+    await expect(paginaTarde.getByText(/ronda \d+/)).toBeVisible();
 
     const enVivo = await readBoard(paginaTemprano);
     const drenado = await readBoard(paginaTarde);
@@ -130,18 +135,21 @@ test.describe("historial completo del canal", () => {
     await seedLongMatch(channelId);
 
     await openGame(page, channelId);
-    await expect(page.getByText(/ronda 1/)).toBeVisible();
+    await expect(page.getByText(/ronda \d+/)).toBeVisible();
     const antes = await readBoard(page);
 
     await page.reload();
     await openGame(page, channelId);
-    await expect(page.getByText(/ronda 1/)).toBeVisible();
+    await expect(page.getByText(/ronda \d+/)).toBeVisible();
     const despues = await readBoard(page);
 
-    // Turno, vidas y marcador viven en las tarjetas; las frases usadas, en la
-    // lista. Se comparan las dos cosas, no un conteo.
-    expect(despues.cards).toEqual(antes.cards);
+    // Entre las dos lecturas pasan segundos reales, y la mecha sigue corriendo:
+    // si explota en el medio, las vidas y la ronda cambian por derecho propio.
+    // Así que se comparan las cosas que una recarga sí tiene que preservar —las
+    // frases dichas y el marcador, que sobreviven a las explosiones— y se exige
+    // que la partida no retroceda.
     expect(despues.said).toEqual(antes.said);
-    expect(despues.round).toBe(antes.round);
+    expect(scores(despues.cards)).toEqual(scores(antes.cards));
+    expect(Number(despues.round)).toBeGreaterThanOrEqual(Number(antes.round));
   });
 });
