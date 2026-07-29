@@ -17,7 +17,24 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${PORT}`,
     trace: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        permissions: ["microphone"],
+        launchOptions: {
+          // Sin micrófono real no hay llamada que probar. Chromium puede
+          // conceder el permiso solo y generar un tono sintético.
+          args: [
+            "--use-fake-ui-for-media-stream",
+            "--use-fake-device-for-media-stream",
+            "--autoplay-policy=no-user-gesture-required",
+          ],
+        },
+      },
+    },
+  ],
   webServer: {
     // NEXT_PUBLIC_E2E habilita `?canal=`, que es lo que permite que cada corrida
     // siembre un canal propio en vez de ensuciar el real. Es de build a

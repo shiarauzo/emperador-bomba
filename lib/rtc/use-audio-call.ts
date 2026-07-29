@@ -1,13 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  fitsInChannel,
-  isCaller,
-  isSignalBody,
-  type SignalBody,
-  type SignalPayload,
-} from "./signal";
+import type { IncomingSignal } from "@/lib/portal/channel";
+import { fitsInChannel, isCaller, type SignalBody, type SignalPayload } from "./signal";
 
 /** STUN público. Sin TURN: ver el riesgo asumido en docs/shaping.md, D7.4. */
 const ICE_SERVERS: RTCIceServer[] = [
@@ -22,13 +17,6 @@ export type CallStatus =
   | "connected"
   | "failed"
   | "ended";
-
-interface IncomingSignal {
-  id: string;
-  timestamp: number;
-  from: string;
-  body: SignalBody;
-}
 
 interface CallInput {
   meId: string | undefined;
@@ -71,6 +59,15 @@ export function useAudioCall({
   const localStream = useRef<MediaStream | null>(null);
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
   const handled = useRef(new Set<string>());
+  /**
+   * La señalización que ya estaba en el canal cuando esto empezó a escuchar.
+   *
+   * Describe conexiones que ya no existen, así que se marca como atendida sin
+   * mirarla. Se hace acá y no filtrando por hora porque los ids no dependen de
+   * ningún reloj: comparar el reloj del navegador contra las marcas del servidor
+   * hace que un cliente adelantado descarte todo y no conecte nunca.
+   */
+  const primed = useRef(false);
   /** La oferta remota puede llegar antes que los candidatos; se encolan. */
   const pendingIce = useRef<RTCIceCandidateInit[]>([]);
 
@@ -154,11 +151,14 @@ export function useAudioCall({
       if (state === "failed") {
         // Sin TURN esto es lo esperable en redes con NAT simétrico.
         setError(
-          "No se pudo establecer la conexión directa. Suele ser la red; el juego sigue jugable.",
+          "No se pudo establecer la conexión directa. Suele ser la red — el juego sigue jugable por texto.",
         );
         setStatus("failed");
       }
-      if (state === "disconnected" || state === "closed") setStatus("ended");
+      // `disconnected` es transitorio y se recupera solo: tratarlo como fin de
+      // llamada esconde los botones a mitad de conversación por un parpadeo.
+      if (state === "disconnected") setStatus("connecting");
+      if (state === "closed") setStatus("ended");
     };
 
     pc.current = connection;
@@ -167,7 +167,13 @@ export function useAudioCall({
 
   const join = useCallback(() => {
     if (!meId || !peerId) return;
+    // Arrancar de cero. Sin esto, reintentar tras un fallo reusaba la conexión
+    // muerta —`createOffer` sin reinicio de ICE no revive nada— y cada intento
+    // dejaba una captura de micrófono viva de más.
+    teardown();
+    primed.current = false;
     setError(null);
+    setMuted(false);
     setStatus("asking-mic");
 
     void (async () => {
@@ -192,16 +198,23 @@ export function useAudioCall({
       localStream.current = stream;
       setStatus("connecting");
 
-      const connection = ensurePeer();
-      attachLocalTracks(connection);
+      try {
+        const connection = ensurePeer();
+        attachLocalTracks(connection);
 
-      if (isCaller(meId, peerId)) {
-        const offer = await connection.createOffer();
-        await connection.setLocalDescription(offer);
-        await send({ type: "offer", sdp: offer.sdp ?? "" });
+        if (isCaller(meId, peerId)) {
+          const offer = await connection.createOffer();
+          await connection.setLocalDescription(offer);
+          await send({ type: "offer", sdp: offer.sdp ?? "" });
+        }
+      } catch (reason) {
+        // Sin esto un rechazo quedaba sin manejar y la pantalla se congelaba en
+        // "Conectando la voz…" sin decir nunca qué pasó.
+        setError(reason instanceof Error ? reason.message : "No se pudo iniciar la llamada");
+        setStatus("failed");
       }
     })();
-  }, [attachLocalTracks, ensurePeer, meId, peerId, send]);
+  }, [attachLocalTracks, ensurePeer, meId, peerId, send, teardown]);
 
   const leave = useCallback(() => {
     void send({ type: "bye" });
@@ -221,7 +234,16 @@ export function useAudioCall({
   // Consumir la señalización dirigida a mí, una sola vez por mensaje.
   useEffect(() => {
     if (!meId || !peerId) return;
-    if (status === "idle" || status === "mic-denied") return;
+    // Colgar tiene que cortar de verdad. Sin esta guarda, una oferta que llega
+    // tarde reconstruye la conexión con `localStream` ya liberado: contestaría
+    // sin micrófono y la interfaz volvería a decir "En llamada".
+    if (status === "idle" || status === "mic-denied" || status === "ended") return;
+
+    if (!primed.current) {
+      primed.current = true;
+      for (const signal of signals) handled.current.add(signal.id);
+      return;
+    }
 
     void (async () => {
       for (const signal of signals) {
@@ -269,5 +291,3 @@ export function useAudioCall({
 
   return { status, muted, error, join, leave, toggleMute };
 }
-
-export { isSignalBody };

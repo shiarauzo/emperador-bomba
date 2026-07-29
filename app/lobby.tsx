@@ -32,12 +32,15 @@ export function Lobby({
   presenceCount,
   meId,
   onStart,
+  onChooseOpponent,
 }: {
   status: ChannelStatus;
   roster: DetailedPresence | undefined;
   presenceCount: number | undefined;
   meId: string | undefined;
   onStart: (players: string[]) => void;
+  /** Avisa hacia arriba para poder llamar antes de empezar la partida. */
+  onChooseOpponent: (id: string) => void;
 }) {
   const [opponent, setOpponent] = useState<string | null>(null);
 
@@ -83,7 +86,10 @@ export function Lobby({
                 <li key={id}>
                   <button
                     type="button"
-                    onClick={() => setOpponent(id)}
+                    onClick={() => {
+                      setOpponent(id);
+                      onChooseOpponent(id);
+                    }}
                     className={`rounded-lg border px-3 py-1 font-mono text-xs ${
                       opponent === id
                         ? "border-foreground"
