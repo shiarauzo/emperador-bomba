@@ -1,6 +1,11 @@
-# portal-project
+# Las locuras del emperador — bomba
 
-Next.js app with a realtime chat surface powered by [Portal](https://useportal.co).
+Juego de voz por turnos para dos personas, sobre [Portal](https://useportal.co).
+Citás frases de la película en tu turno; una frase correcta puntúa y le pasa la bomba
+al otro. A quien le explota pierde una vida.
+
+Ver [`docs/frame.md`](./docs/frame.md), [`docs/shaping.md`](./docs/shaping.md) y
+[`docs/slices.md`](./docs/slices.md).
 
 ## Portal resources
 
@@ -43,17 +48,19 @@ portal origins add https://your-domain.com --env env_877382abd9da45e0a2646a8aaca
   publishable key and publishes it via `PortalProvider`. Anonymous mode: no token,
   no `/api/portal-token` endpoint. The SDK mints and keeps a stable anonymous
   identity across refreshes.
-- `app/chat-room.tsx` — one `useChannel<ChatMessage>()` call drives messages,
-  sending, history backfill, presence roster, typing indicators, and connection
-  status.
 - `app/page.tsx` / `app/layout.tsx` — mount points.
+
+Note that `PortalProvider` only puts the client on React context. Nothing connects
+until something calls `useChannel` — the transport opens on first subscription,
+not on mount.
 
 ### Known API limitation
 
 `setMetadata()` (mid-session presence metadata) emits a standalone `meta` frame
 that the API currently rejects with `upstream frame 'meta' not accepted`. Initial
-metadata on the connect frame works fine, so the display name is chosen **before**
-joining and passed as `useChannel({ metadata })`. Revisit if the server starts
+metadata on the connect frame works fine, so anything that has to travel with a
+session — a display name, a chosen movie — must be passed as
+`useChannel({ metadata })` at subscribe time. Revisit if the server starts
 accepting `meta`.
 
 ## Verifying realtime from the terminal
