@@ -8,28 +8,40 @@ function freshChannel(name: string): string {
 
 async function openGame(page: Page, channelId: string) {
   await page.goto(`/?canal=${channelId}`);
-  // El tablero no aparece hasta que el historial está drenado.
-  await expect(page.getByText("Trayendo la partida…")).toHaveCount(0, {
-    timeout: 30_000,
-  });
+  // Esperar algo que sólo existe una vez drenado, en vez de esperar a que el
+  // cartel de carga desaparezca: ese cartel también está ausente en el frame
+  // anterior a la hidratación, así que esperarlo pasaría sin probar nada.
+  await expect(
+    page.getByRole("button", { name: /Elegí rival|Falta que entre|Empezar/ }).or(
+      page.getByText(/ronda \d+/),
+    ),
+  ).toBeVisible({ timeout: 30_000 });
 }
 
 /**
  * Lo que las dos pantallas tienen que ver igual.
  *
- * Se lee el número de ronda, no la línea entera: la línea incluye los segundos
- * que lleva ardiendo la mecha, y dos lecturas hechas con un segundo de
- * diferencia muestran números distintos aunque estén ancladas a la misma hora
- * del servidor. Eso no es una desincronización, es un reloj corriendo.
+ * No se lee la línea de la ronda entera: incluye los segundos que lleva ardiendo
+ * la mecha, y dos lecturas con un segundo de diferencia dan números distintos
+ * aunque estén ancladas a la misma hora del servidor. Eso es un reloj corriendo,
+ * no una desincronización.
  */
 async function readBoard(page: Page) {
-  const cards = page.locator("ul > li").filter({ hasText: "♥" });
   const header = await page.getByText(/ronda \d+/).innerText();
+  const cards = page.locator("ul > li").filter({ hasText: "♥" });
+  const said = page.locator("section li");
+
   return {
     round: header.match(/ronda (\d+)/)?.[1],
-    players: await cards.allInnerTexts(),
-    said: await page.getByText(/^Dichas \(\d+\)$/i).innerText(),
+    /** Sin ordenar y sin recortar: quién tiene el turno y quién anotó importan. */
+    cards: await cards.allInnerTexts(),
+    said: await said.allInnerTexts(),
   };
+}
+
+/** Marcador por jugador, sin depender de cuál pantalla dice "vos". */
+function scores(cards: string[]): number[] {
+  return cards.map((card) => Number(card.match(/· (\d+) frases/)?.[1] ?? -1));
 }
 
 test.describe("historial completo del canal", () => {
@@ -37,10 +49,10 @@ test.describe("historial completo del canal", () => {
     browser,
   }) => {
     const channelId = freshChannel("largo");
-    const { totalMessages } = await seedLongMatch(channelId);
-    expect(totalMessages).toBeGreaterThan(50);
+    const seeded = await seedLongMatch(channelId);
+    expect(seeded.totalMessages).toBeGreaterThan(50);
 
-    // Dos contextos separados: almacenamiento aparte, identidades anónimas
+    // Dos contextos separados: almacenamiento aparte e identidades anónimas
     // distintas, igual que dos personas en dos máquinas.
     const uno = await browser.newContext();
     const dos = await browser.newContext();
@@ -50,26 +62,65 @@ test.describe("historial completo del canal", () => {
     await openGame(paginaUno, channelId);
     await openGame(paginaDos, channelId);
 
-    // Si el historial no se drenara, el mensaje de arranque quedaría fuera de la
-    // ventana y las dos verían la sala de espera en vez de la partida.
+    // Sin drenar, el mensaje de arranque queda fuera de la ventana de cincuenta
+    // y las dos pantallas mostrarían la sala de espera en vez de la partida.
     await expect(paginaUno.getByText(/ronda 1/)).toBeVisible();
     await expect(paginaDos.getByText(/ronda 1/)).toBeVisible();
 
     const tableroUno = await readBoard(paginaUno);
     const tableroDos = await readBoard(paginaDos);
 
-    expect(tableroUno.said).toBe("DICHAS (2)");
-    expect(tableroDos.said).toBe(tableroUno.said);
+    // Las frases, con su texto: contar dos no prueba que sean las mismas dos.
+    for (const frase of seeded.expectedSaid) {
+      expect(tableroUno.said.join(" | ")).toContain(frase);
+    }
+    expect(tableroDos.said).toEqual(tableroUno.said);
     expect(tableroDos.round).toBe(tableroUno.round);
 
-    // Las tarjetas dicen "vos" en la propia pantalla, así que se comparan las
-    // vidas y el marcador, que son los mismos hechos para las dos.
-    const marcador = (textos: string[]) =>
-      textos.map((t) => t.replace(/^.*\n/, "")).sort();
-    expect(marcador(tableroDos.players)).toEqual(marcador(tableroUno.players));
+    // El marcador es asimétrico, así que esta comparación no puede pasar sola.
+    expect(scores(tableroUno.cards)).toEqual([2, 1]);
+    expect(scores(tableroDos.cards)).toEqual(scores(tableroUno.cards));
+
+    // Y las dos coinciden en de quién es el turno.
+    const turno = (cards: string[]) => cards.findIndex((c) => c.includes("su turno"));
+    expect(turno(tableroDos.cards)).toBe(turno(tableroUno.cards));
+    expect(turno(tableroUno.cards)).toBeGreaterThanOrEqual(0);
 
     await uno.close();
     await dos.close();
+  });
+
+  test("una pestaña que entra tarde llega al mismo estado que la que estuvo desde el principio", async ({
+    browser,
+  }) => {
+    const channelId = freshChannel("tarde");
+
+    // Esta pestaña abre el canal vacío y arma su historial recibiendo mensajes
+    // en vivo por el socket.
+    const temprano = await browser.newContext();
+    const paginaTemprano = await temprano.newPage();
+    await openGame(paginaTemprano, channelId);
+
+    const seeded = await seedLongMatch(channelId);
+    await expect(paginaTemprano.getByText(/ronda 1/)).toBeVisible();
+
+    // Esta lo arma drenando el historial. Son dos caminos de código distintos y
+    // tienen que terminar en el mismo estado.
+    const tarde = await browser.newContext();
+    const paginaTarde = await tarde.newPage();
+    await openGame(paginaTarde, channelId);
+    await expect(paginaTarde.getByText(/ronda 1/)).toBeVisible();
+
+    const enVivo = await readBoard(paginaTemprano);
+    const drenado = await readBoard(paginaTarde);
+
+    expect(drenado.said).toEqual(enVivo.said);
+    expect(drenado.said.length).toBe(seeded.expectedSaid.length);
+    expect(scores(drenado.cards)).toEqual(scores(enVivo.cards));
+    expect(drenado.round).toBe(enVivo.round);
+
+    await temprano.close();
+    await tarde.close();
   });
 
   test("recargar a mitad de partida recupera el estado exacto", async ({
@@ -87,7 +138,10 @@ test.describe("historial completo del canal", () => {
     await expect(page.getByText(/ronda 1/)).toBeVisible();
     const despues = await readBoard(page);
 
-    expect(despues.said).toBe(antes.said);
-    expect(despues.players).toEqual(antes.players);
+    // Turno, vidas y marcador viven en las tarjetas; las frases usadas, en la
+    // lista. Se comparan las dos cosas, no un conteo.
+    expect(despues.cards).toEqual(antes.cards);
+    expect(despues.said).toEqual(antes.said);
+    expect(despues.round).toBe(antes.round);
   });
 });

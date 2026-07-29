@@ -19,9 +19,13 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
+    // NEXT_PUBLIC_E2E habilita `?canal=`, que es lo que permite que cada corrida
+    // siembre un canal propio en vez de ensuciar el real. Es de build a
+    // propósito: el bundle de producción no lo lleva.
     command: `npm run build && npx next start --port ${PORT}`,
+    env: { NEXT_PUBLIC_E2E: "1" },
     url: `http://127.0.0.1:${PORT}`,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 180_000,
   },
 });

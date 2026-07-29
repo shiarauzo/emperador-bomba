@@ -5,18 +5,23 @@ import type { GameEvent, GameEventBody } from "@/lib/engine/types";
 export const DEFAULT_CHANNEL_ID = "emperador-bomba";
 
 /**
- * Permite apuntar a otro canal con `?canal=`.
+ * Resuelve contra qué canal jugar.
  *
- * Existe para las pruebas de punta a punta: sembrar más de cincuenta mensajes
- * sobre el canal real lo dejaría sucio para siempre y cada corrida lo empeoraría.
- * No es la funcionalidad de salas compartibles — no hay forma de crear una desde
- * la interfaz — pero es el mismo mecanismo si algún día se agrega.
+ * En producción siempre es el canal fijo. Sólo cuando el build se marcó como de
+ * pruebas se acepta `?canal=`, porque sembrar más de cincuenta mensajes sobre el
+ * canal real lo dejaría sucio para siempre y cada corrida lo empeoraría.
  *
- * Devuelve `undefined` durante el render en servidor, que es exactamente lo que
- * `useChannel` espera para no abrir conexión.
+ * La bandera es de build, no de runtime, justamente para que el mecanismo no
+ * exista en el bundle que usa la gente: la barra de direcciones también es una
+ * interfaz, y esto no es la funcionalidad de salas compartibles.
+ *
+ * Devuelve `undefined` durante el render en servidor, que es lo que `useChannel`
+ * espera para no abrir conexión.
  */
 export function channelIdFromLocation(): string | undefined {
   if (typeof window === "undefined") return undefined;
+  if (process.env.NEXT_PUBLIC_E2E !== "1") return DEFAULT_CHANNEL_ID;
+
   const requested = new URLSearchParams(window.location.search).get("canal");
   return requested?.trim() || DEFAULT_CHANNEL_ID;
 }

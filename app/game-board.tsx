@@ -7,17 +7,11 @@ import { isExpired } from "@/lib/engine/fuse";
 import type { GameEventBody } from "@/lib/engine/types";
 import { CATALOG, DEFAULT_MOVIE_ID } from "@/lib/movies";
 import { channelIdFromLocation, toGameEvents } from "@/lib/portal/channel";
+import { useDrainedHistory } from "@/lib/portal/use-drained-history";
 import { Lobby } from "./lobby";
 import { Round } from "./round";
 
 const TICK_MS = 200;
-
-/**
- * Tope de páginas de historial. A 50 mensajes por página son 5000 mensajes: muy
- * por encima de cualquier partida, y suficientemente bajo como para que un canal
- * que nunca declare su principio no deje la pantalla cargando para siempre.
- */
-const MAX_HISTORY_PAGES = 100;
 
 /**
  * Orquesta la partida: trae los mensajes del canal, los traduce a eventos,
@@ -45,31 +39,24 @@ export function GameBoard() {
     status,
     loadPrevious,
     hasPrevious,
+    isLoadingPrevious,
   } = useChannel<GameEventBody>({
     channelId,
     history: 50,
     onError: (channelError) => setError(channelError.message),
   });
 
-  // `hasPrevious` arranca en `true` optimista y cae a `false` recién cuando
-  // `loadPrevious` llegó al principio del canal. Así que estar drenado *es* no
-  // tener más páginas: no hace falta estado propio para saberlo.
-  const drained = !hasPrevious;
-
-  // Pedir páginas hasta agotarlas. Cada `loadPrevious` reescribe el store, el
-  // componente se vuelve a renderizar y el efecto se dispara otra vez hasta que
-  // `hasPrevious` cae.
-  //
-  // El tope existe porque un canal que nunca dijera "llegué al principio"
-  // dejaría la partida pidiendo páginas para siempre. Preferible cortar y jugar
-  // con lo que haya que colgarse en una pantalla de carga.
-  const pagesLoaded = useRef(0);
-  useEffect(() => {
-    if (!hasPrevious) return;
-    if (pagesLoaded.current >= MAX_HISTORY_PAGES) return;
-    pagesLoaded.current += 1;
-    void loadPrevious();
-  }, [hasPrevious, loadPrevious, messages]);
+  const {
+    drained,
+    incomplete: historyIncomplete,
+    error: historyError,
+  } = useDrainedHistory({
+    hasPrevious,
+    isLoadingPrevious,
+    loadPrevious,
+    messages,
+    enabled: channelId !== undefined,
+  });
 
   const events = useMemo(() => toGameEvents(messages), [messages]);
   const state = useMemo(
@@ -136,11 +123,24 @@ export function GameBoard() {
   const presenceCount = presence?.count;
   const movie = state.movieId ? CATALOG[state.movieId] : null;
 
-  const banner = error ? (
-    <p className="mx-auto max-w-xl rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-400">
-      {error}
-    </p>
-  ) : null;
+  const shown = error ?? historyError;
+  const banner = (
+    <>
+      {shown && (
+        <p className="mx-auto max-w-xl rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-400">
+          {shown}
+        </p>
+      )}
+      {historyIncomplete && (
+        // Con historial faltante lo que se ve puede no ser la partida real. Se
+        // muestra igual — colgarse cargando sería peor — pero se dice.
+        <p className="mx-auto max-w-xl rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+          No se pudo traer el historial completo. Lo que ves puede no coincidir
+          con la otra pantalla.
+        </p>
+      )}
+    </>
+  );
 
   // Nada de juego hasta tener el historial completo. Derivar sobre un backfill
   // parcial no da una partida incompleta: da otra partida. Quien entrara tarde

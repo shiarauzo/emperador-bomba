@@ -64,14 +64,27 @@ export async function seedLongMatch(channelId: string) {
     });
   }
 
-  await publish(channelId, ANA, {
-    kind: "say",
-    text: "eh, no existe tal cosa",
-  });
+  // Marcador asimétrico a propósito: si los dos terminaran con la misma cifra,
+  // comparar las tarjetas de una pantalla contra las de la otra pasaría aunque
+  // discreparan sobre quién anotó.
+  await publish(channelId, ANA, { kind: "say", text: "eh, no existe tal cosa" });
   await publish(channelId, BETO, {
     kind: "say",
     text: "jala la palanca kronk!",
   });
+  await publish(channelId, ANA, {
+    kind: "say",
+    text: "¿por qué tenemos esa palanca?",
+  });
 
-  return { totalMessages: 58 };
+  return {
+    totalMessages: 59,
+    /** Las frases canónicas, en el orden en que quedaron dichas. */
+    expectedSaid: [
+      "no existe tal cosa",
+      "jala la palanca Kronk",
+      "por qué tenemos esa palanca",
+    ],
+    expectedScores: { [ANA]: 2, [BETO]: 1 },
+  };
 }
