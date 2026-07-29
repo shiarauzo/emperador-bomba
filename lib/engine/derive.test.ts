@@ -48,6 +48,31 @@ describe("arranque", () => {
     expect(state.round).toBe(1);
   });
 
+  it("un arranque después del final abre una partida nueva y limpia", () => {
+    let at = 0;
+    const events: GameEvent[] = [opened()];
+    for (let round = 0; round < 3; round++) {
+      at += fuseDuration(events[events.length - 1].id);
+      events.push(event(A, { kind: "boom" }, at));
+    }
+    expect(deriveGameState(events, at, CATALOG).phase).toBe("over");
+
+    events.push(
+      event(B, { kind: "start", movieId: "emperador", players: [B, A] }, at + 100),
+    );
+    const state = deriveGameState(events, at + 100, CATALOG);
+
+    expect(state.phase).toBe("playing");
+    expect(state.turnOf).toBe(B);
+    expect(state.lives).toEqual({ [A]: 3, [B]: 3 });
+    expect(state.score).toEqual({ [A]: 0, [B]: 0 });
+    expect(state.round).toBe(1);
+    expect(state.winner).toBeNull();
+    // Las frases vuelven a estar disponibles: es otra partida, no otra ronda.
+    expect(state.usedQuoteIds).toEqual([]);
+    expect(state.said).toEqual([]);
+  });
+
   it("ignora un segundo arranque en una partida en curso", () => {
     const start = opened();
     const otro = event(

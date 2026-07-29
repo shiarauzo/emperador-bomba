@@ -49,13 +49,16 @@ function applyEvent(
   const { body } = event;
 
   if (body.kind === "start") {
-    // Un segundo arranque no reinicia una partida en curso.
-    if (state.phase !== "waiting") return state;
+    // Un arranque reinicia desde cero, pero sólo cuando no hay partida corriendo:
+    // desde la sala de espera o después de un final. Si no aceptara `start` sobre
+    // una partida terminada, el canal quedaría muerto para siempre — y el canal
+    // es fijo, así que se llevaría puesto el juego entero, no una sesión.
+    if (state.phase === "playing") return state;
     if (body.players.length < 2) return state;
     if (!catalog[body.movieId]) return state;
 
     return {
-      ...state,
+      ...emptyState(),
       phase: "playing",
       movieId: body.movieId,
       players: [...body.players],
