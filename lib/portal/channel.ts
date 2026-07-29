@@ -2,7 +2,24 @@ import type { Message } from "@portalsdk/core";
 import type { GameEvent, GameEventBody } from "@/lib/engine/types";
 
 /** Por ahora una sola sala. Salas con link compartible están fuera de alcance. */
-export const CHANNEL_ID = "emperador-bomba";
+export const DEFAULT_CHANNEL_ID = "emperador-bomba";
+
+/**
+ * Permite apuntar a otro canal con `?canal=`.
+ *
+ * Existe para las pruebas de punta a punta: sembrar más de cincuenta mensajes
+ * sobre el canal real lo dejaría sucio para siempre y cada corrida lo empeoraría.
+ * No es la funcionalidad de salas compartibles — no hay forma de crear una desde
+ * la interfaz — pero es el mismo mecanismo si algún día se agrega.
+ *
+ * Devuelve `undefined` durante el render en servidor, que es exactamente lo que
+ * `useChannel` espera para no abrir conexión.
+ */
+export function channelIdFromLocation(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  const requested = new URLSearchParams(window.location.search).get("canal");
+  return requested?.trim() || DEFAULT_CHANNEL_ID;
+}
 
 /** Lo que viaja en `content`. El texto va crudo: el matching es del motor. */
 export type GameMessage = Message<GameEventBody>;

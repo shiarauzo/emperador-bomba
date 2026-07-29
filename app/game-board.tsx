@@ -6,11 +6,18 @@ import { deriveGameState } from "@/lib/engine/derive";
 import { isExpired } from "@/lib/engine/fuse";
 import type { GameEventBody } from "@/lib/engine/types";
 import { CATALOG, DEFAULT_MOVIE_ID } from "@/lib/movies";
-import { CHANNEL_ID, toGameEvents } from "@/lib/portal/channel";
+import { channelIdFromLocation, toGameEvents } from "@/lib/portal/channel";
 import { Lobby } from "./lobby";
 import { Round } from "./round";
 
 const TICK_MS = 200;
+
+/**
+ * Tope de páginas de historial. A 50 mensajes por página son 5000 mensajes: muy
+ * por encima de cualquier partida, y suficientemente bajo como para que un canal
+ * que nunca declare su principio no deje la pantalla cargando para siempre.
+ */
+const MAX_HISTORY_PAGES = 100;
 
 /**
  * Orquesta la partida: trae los mensajes del canal, los traduce a eventos,
@@ -26,12 +33,43 @@ export function GameBoard() {
   // Volver a la sala es una decisión de esta pantalla, no un hecho del canal:
   // la otra persona sigue mirando el resultado hasta que arranque la partida.
   const [backToLobby, setBackToLobby] = useState(false);
+  // Se resuelve una vez, al montar. El servidor no ve la URL del navegador, así
+  // que ahí queda `undefined` y `useChannel` no abre conexión.
+  const [channelId] = useState(channelIdFromLocation);
 
-  const { messages, send, presence, me, status } = useChannel<GameEventBody>({
-    channelId: CHANNEL_ID,
+  const {
+    messages,
+    send,
+    presence,
+    me,
+    status,
+    loadPrevious,
+    hasPrevious,
+  } = useChannel<GameEventBody>({
+    channelId,
     history: 50,
     onError: (channelError) => setError(channelError.message),
   });
+
+  // `hasPrevious` arranca en `true` optimista y cae a `false` recién cuando
+  // `loadPrevious` llegó al principio del canal. Así que estar drenado *es* no
+  // tener más páginas: no hace falta estado propio para saberlo.
+  const drained = !hasPrevious;
+
+  // Pedir páginas hasta agotarlas. Cada `loadPrevious` reescribe el store, el
+  // componente se vuelve a renderizar y el efecto se dispara otra vez hasta que
+  // `hasPrevious` cae.
+  //
+  // El tope existe porque un canal que nunca dijera "llegué al principio"
+  // dejaría la partida pidiendo páginas para siempre. Preferible cortar y jugar
+  // con lo que haya que colgarse en una pantalla de carga.
+  const pagesLoaded = useRef(0);
+  useEffect(() => {
+    if (!hasPrevious) return;
+    if (pagesLoaded.current >= MAX_HISTORY_PAGES) return;
+    pagesLoaded.current += 1;
+    void loadPrevious();
+  }, [hasPrevious, loadPrevious, messages]);
 
   const events = useMemo(() => toGameEvents(messages), [messages]);
   const state = useMemo(
@@ -103,6 +141,22 @@ export function GameBoard() {
       {error}
     </p>
   ) : null;
+
+  // Nada de juego hasta tener el historial completo. Derivar sobre un backfill
+  // parcial no da una partida incompleta: da otra partida. Quien entrara tarde
+  // vería la sala de espera mientras el otro juega, o un marcador que no existe.
+  if (!drained) {
+    return (
+      <div className="m-auto flex flex-col items-center gap-2 p-6 text-center">
+        {banner}
+        <p className="font-mono text-sm text-neutral-500">
+          {status === "blocked"
+            ? "El canal rechazó la conexión."
+            : "Trayendo la partida…"}
+        </p>
+      </div>
+    );
+  }
 
   if (state.phase === "waiting" || (state.phase === "over" && backToLobby)) {
     return (
