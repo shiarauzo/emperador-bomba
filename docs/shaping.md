@@ -170,9 +170,9 @@ interactuar con lo anterior.
 | N2 | P1 | lobby | `publishStart()` | call | → N15, → P2 | — |
 | N3 | P2 | portal | `useChannel({ channelId, history })` | observe | → N4 | → S2 |
 | N4 | P2 | portal | `drainHistory()` — repite `loadPrevious()` hasta que `hasPrevious` sea falso | call | → S2 | — |
-| N5 | P2 | engine | `deriveGameState(mensajes, ahora)` | call | → N7, → N9 | → S3 |
-| N6 | P2 | engine | `useTicker()` — re-deriva con un `ahora` fresco cada frame | observe | → N5 | — |
-| N7 | P2 | engine | `matchPhrase(texto, frases, usadas)` | call | → N8 | → N5 |
+| N5 | P2 | engine | `deriveGameState(mensajes, ahora, catálogo)` | call | → N7, → N9 | → S3 |
+| N6 | P2 | engine | `useTicker()` — re-deriva con un `ahora` fresco cada tick | observe | → N5 | — |
+| N7 | P2 | engine | `matchQuote(texto, frases, usadas)` | call | → N8 | → N5 |
 | N8 | P2 | engine | `normalize(texto)` — minúsculas, sin acentos, sin puntuación | call | — | → N7 |
 | N9 | P2 | engine | `fuseDuration(idDelArranque)` — hash determinista a milisegundos | call | — | → N5 |
 | N10 | P2 | mic | `startRecognition()` / `stopRecognition()` | call | → N11 | — |
@@ -332,6 +332,13 @@ flowchart TB
   vería congelada hasta el siguiente mensaje.
 - **N14 escribe al canal leyendo S3**, que es lo que convierte una explosión local en un
   hecho compartido. El desempate por `seq` vive dentro de N5.
+
+**Corregido al implementar (V1):** N5 recibe además el catálogo de películas — el
+matching ocurre dentro de la derivación, así que las frases tienen que entrar por
+parámetro para que la función siga siendo pura. Y la derivación descarta todo evento
+cuyo `timestamp` sea anterior a la apertura de la ronda en curso: `seq` ordena el fold,
+pero no garantiza que el reloj del servidor acompañe, y sin esa guarda un mensaje
+rezagado puntuaría en una ronda que empezó después de que se dijo.
 
 ---
 

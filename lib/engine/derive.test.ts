@@ -274,16 +274,56 @@ describe("determinismo", () => {
     );
   });
 
-  it("una pantalla que entra tarde deriva lo mismo que la que estuvo siempre", () => {
+  it("un historial truncado NO deriva lo mismo: por eso hay que drenarlo entero", () => {
     const events = [
       opened(),
       event(A, { kind: "say", text: "No existe tal cosa" }, 1000),
       event(B, { kind: "say", text: "jala la palanca kronk" }, 2000),
     ];
 
-    const desdeElPrincipio = deriveGameState(events, 9000, CATALOG);
-    const reciénLlegada = deriveGameState([...events], 9000, CATALOG);
+    const completo = deriveGameState(events, 9000, CATALOG);
+    const truncado = deriveGameState(events.slice(-2), 9000, CATALOG);
 
-    expect(reciénLlegada).toEqual(desdeElPrincipio);
+    // Sin el mensaje de arranque no hay partida: quien reciba sólo el backfill
+    // por defecto de Portal vería otro juego que quien tiene el historial entero.
+    expect(truncado.phase).toBe("waiting");
+    expect(truncado).not.toEqual(completo);
+  });
+});
+
+describe("el reloj es el del mensaje, no el del navegador", () => {
+  it("una frase dicha pasada la mecha no cuenta, aunque se derive con un `now` temprano", () => {
+    const events = [
+      opened(),
+      event(A, { kind: "say", text: "No existe tal cosa" }, START_FUSE + 1),
+    ];
+
+    // Si la mecha se evaluara contra `now`, acá estaría fresca y la frase contaría.
+    const state = deriveGameState(events, 0, CATALOG);
+
+    expect(state.score[A]).toBe(0);
+    expect(state.turnOf).toBe(A);
+  });
+
+  it("una explosión cuenta por la hora de su mensaje, no por cuándo se recalcula", () => {
+    const events = [opened(), event(A, { kind: "boom" }, START_FUSE)];
+
+    // `now` anterior al vencimiento: la explosión ya ocurrió igual.
+    const state = deriveGameState(events, 1000, CATALOG);
+
+    expect(state.lives[A]).toBe(2);
+    expect(state.round).toBe(2);
+  });
+
+  it("un mensaje rezagado, anterior a la ronda en curso, se descarta", () => {
+    const start = opened();
+    const boom = event(A, { kind: "boom" }, START_FUSE);
+    // seq posterior pero reloj anterior a la apertura de la ronda nueva.
+    const rezagado = event(B, { kind: "say", text: "jala la palanca kronk" }, 1000);
+
+    const state = deriveGameState([start, boom, rezagado], START_FUSE + 100, CATALOG);
+
+    expect(state.score[B]).toBe(0);
+    expect(state.usedQuoteIds).toEqual([]);
   });
 });

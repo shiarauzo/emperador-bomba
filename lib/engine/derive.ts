@@ -28,6 +28,15 @@ function nextPlayer(players: readonly string[], current: string): string {
   return players[(index + 1) % players.length];
 }
 
+/** Abre una mecha anclada al mensaje que inaugura la ronda. */
+function openFuse(event: GameEvent) {
+  return {
+    openedAt: event.timestamp,
+    duration: fuseDuration(event.id),
+    expired: false,
+  };
+}
+
 /**
  * Aplica un evento al estado. Todo evento que no cumpla sus condiciones se
  * ignora entero: no hay penalizaciones, sólo el tiempo que costó decirlo.
@@ -54,15 +63,17 @@ function applyEvent(
       lives: Object.fromEntries(body.players.map((p) => [p, STARTING_LIVES])),
       score: Object.fromEntries(body.players.map((p) => [p, 0])),
       round: 1,
-      fuse: {
-        openedAt: event.timestamp,
-        duration: fuseDuration(event.id),
-        expired: false,
-      },
+      fuse: openFuse(event),
     };
   }
 
   if (state.phase !== "playing" || !state.fuse || !state.movieId) return state;
+
+  // Un evento anterior a la apertura de esta ronda no le pertenece. `seq` ordena
+  // el fold, pero nada garantiza que el reloj del servidor y el orden de llegada
+  // coincidan: sin esta guarda, un mensaje rezagado daría tiempo negativo y
+  // puntuaría en una ronda que empezó después de que se dijo.
+  if (event.timestamp < state.fuse.openedAt) return state;
 
   // La mecha se evalúa contra la hora del propio evento, no contra "ahora": lo
   // que ya estaba vencido cuando se dijo, sigue vencido al recalcular mañana.
@@ -117,11 +128,7 @@ function applyEvent(
       lives,
       round: state.round + 1,
       // Quien explotó abre la ronda siguiente.
-      fuse: {
-        openedAt: event.timestamp,
-        duration: fuseDuration(event.id),
-        expired: false,
-      },
+      fuse: openFuse(event),
     };
   }
 
