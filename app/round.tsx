@@ -50,7 +50,10 @@ export function Round({
   onSay: (text: string) => void;
 }) {
   const [draft, setDraft] = useState("");
-  const [voiceOn, setVoiceOn] = useState(true);
+  // Apagado por omisión, igual que la llamada. Encenderlo solo abriría el
+  // micrófono —con su pedido de permiso— apenas te toca el turno, sin que nadie
+  // lo haya pedido en esta pantalla.
+  const [voiceOn, setVoiceOn] = useState(false);
 
   const myTurn = state.turnOf === meId;
 
@@ -151,7 +154,9 @@ export function Round({
       {/* Lo que el micrófono está entendiendo ahora. Verlo es lo que permite
           darse cuenta de que escuchó mal, en vez de creer que el juego falla. */}
       <p className="min-h-6 font-mono text-xs text-neutral-500">
-        {speech.interim || (speech.state === "listening" ? "…" : "")}
+        {speech.interim ||
+          (speech.heard && `oí: “${speech.heard}”`) ||
+          (speech.state === "listening" ? "…" : "")}
       </p>
 
       <form

@@ -12,6 +12,9 @@ import type {
   SpeechRecognizer,
 } from "./types";
 
+/** Tope de relanzados seguidos sin llegar a escuchar. */
+const MAX_RESTARTS = 5;
+
 export type ListeningState =
   | "unsupported"
   | "off"
@@ -23,6 +26,14 @@ export interface SpeechResult {
   state: ListeningState;
   /** Lo que se está oyendo ahora mismo, todavía sin confirmar. */
   interim: string;
+  /**
+   * Lo último que el micrófono dio por confirmado.
+   *
+   * Se conserva porque es justo lo que hay que ver cuando escuchó mal: si sólo
+   * se mostrara lo provisional, el texto desaparecería en el instante en que se
+   * confirma, y una frase mal entendida no dejaría rastro en ninguna parte.
+   */
+  heard: string;
   error: string | null;
   start: () => void;
   stop: () => void;
@@ -46,10 +57,15 @@ export function useSpeech({
 }): SpeechResult {
   const [state, setState] = useState<ListeningState>("off");
   const [interim, setInterim] = useState("");
+  const [heard, setHeard] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const recognition = useRef<SpeechRecognizer | null>(null);
+  /** Si se debe seguir escuchando; gobierna el relanzado automático. */
   const wanted = useRef(false);
+  /** Relanzados seguidos sin haber llegado a escuchar. Corta los bucles. */
+  const failedRestarts = useRef(0);
+  const restartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // El callback cambia en cada render; la instancia del reconocedor no. Sin esto
   // el manejador se quedaría con una versión vieja y publicaría contra un estado
   // que ya no existe.
@@ -62,8 +78,26 @@ export function useSpeech({
   // referenciarse antes de estar declarado.
   const startRef = useRef<() => void>(() => {});
 
+  /**
+   * Reporta un fallo sin encadenar renders.
+   *
+   * `start()` se llama desde un efecto, así que cambiar estado ahí mismo dispara
+   * una cascada. Un error no necesita estar en pantalla en ese instante — sí en
+   * el siguiente tick.
+   */
+  const reportFailure = useCallback((message: string) => {
+    queueMicrotask(() => {
+      setState("error");
+      setError(message);
+    });
+  }, []);
+
   const stop = useCallback(() => {
     wanted.current = false;
+    if (restartTimer.current) {
+      clearTimeout(restartTimer.current);
+      restartTimer.current = null;
+    }
     recognition.current?.stop();
     recognition.current = null;
   }, []);
@@ -84,6 +118,7 @@ export function useSpeech({
     // sincrónicamente desde un efecto encadena renders, y además el motor puede
     // tardar en arrancar de verdad.
     engine.onstart = () => {
+      failedRestarts.current = 0;
       setError(null);
       setState("listening");
     };
@@ -94,6 +129,7 @@ export function useSpeech({
         const result = event.results[i];
         const text = result[0].transcript;
         if (result.isFinal) {
+          setHeard(text.trim());
           // Sólo lo confirmado se publica. Lo provisional cambia mientras hablás
           // y publicarlo mandaría media frase.
           if (isWorthSubmitting(text)) latestOnPhrase.current(text.trim());
@@ -114,33 +150,59 @@ export function useSpeech({
       }
       // `no-speech` y `aborted` son rutina: pasan cuando alguien se queda
       // callado. No son un fallo y no deberían aparecer en pantalla.
-      if (kind && kind !== "no-speech" && kind !== "aborted") {
-        setError(`El reconocimiento falló (${kind}).`);
-        setState("error");
-      }
+      if (!kind || kind === "no-speech" || kind === "aborted") return;
+
+      // Todo lo demás —sin red, micrófono desenchufado— vuelve a fallar apenas
+      // se reintenta. Sin cortar acá, `onend` relanzaría al instante y quedaría
+      // un bucle de reinicios a cero milisegundos.
+      wanted.current = false;
+      setError(`El reconocimiento falló (${kind}).`);
+      setState("error");
     };
 
     engine.onend = () => {
-      // Chrome corta la escucha continua a los ~60 s de silencio, sin avisar. Si
-      // todavía la queremos, se relanza: sin esto la voz se muere sola a mitad
-      // de partida y nadie entiende por qué.
+      // `onend` llega tarde. Si mientras tanto se creó otra instancia, ésta ya
+      // no manda: sin esta guarda, el `onend` de la vieja anulaba la referencia
+      // a la nueva y arrancaba una tercera — dos reconocedores vivos publicando
+      // cada frase dos veces, y uno de ellos con el micrófono abierto y sin
+      // forma de apagarlo desde la interfaz.
+      if (recognition.current !== engine) return;
+
       recognition.current = null;
       setInterim("");
       if (!wanted.current) {
         setState((current) => (current === "listening" ? "off" : current));
         return;
       }
-      startRef.current();
+
+      // Chrome corta la escucha continua a los ~60 s de silencio, sin avisar.
+      // Se relanza, con espera creciente y con tope: si nunca llega a escuchar,
+      // insistir sin pausa no lo va a arreglar.
+      failedRestarts.current += 1;
+      if (failedRestarts.current > MAX_RESTARTS) {
+        wanted.current = false;
+        setState("error");
+        setError("El reconocimiento no se pudo sostener. Probá apagarlo y encenderlo.");
+        return;
+      }
+      const wait = Math.min(2000, 100 * 2 ** (failedRestarts.current - 1));
+      restartTimer.current = setTimeout(() => startRef.current(), wait);
     };
 
     try {
       engine.start();
       recognition.current = engine;
-    } catch {
-      // Arrancar dos veces la misma instancia tira; no es un fallo real.
-      recognition.current = engine;
+    } catch (reason) {
+      // Guardar acá un motor que nunca arrancó dejaba al hook creyendo que
+      // escuchaba: sin `onstart` ni `onend`, la pantalla decía "Escuchando…"
+      // para siempre con el micrófono muerto y sin forma de recuperarse.
+      recognition.current = null;
+      wanted.current = false;
+      reportFailure(
+        reason instanceof Error ? reason.message : "No se pudo abrir el micrófono",
+      );
     }
-  }, []);
+  }, [reportFailure]);
 
   useEffect(() => {
     startRef.current = start;
@@ -168,5 +230,5 @@ export function useSpeech({
 
   useEffect(() => stop, [stop]);
 
-  return { state, interim, error, start, stop };
+  return { state, interim, heard, error, start, stop };
 }
