@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { GameState, Movie, SaidQuote } from "@/lib/engine/types";
+import { useSpeech } from "@/lib/speech/use-speech";
 import { Bomb } from "./bomb";
 
 function quoteText(movie: Movie | null, quoteId: string): string {
@@ -49,8 +50,17 @@ export function Round({
   onSay: (text: string) => void;
 }) {
   const [draft, setDraft] = useState("");
+  const [voiceOn, setVoiceOn] = useState(true);
 
   const myTurn = state.turnOf === meId;
+
+  // Se escucha sólo en tu turno. Fuera de turno el motor descarta igual, y con
+  // la llamada abierta el micrófono está captando todo el tiempo: publicar cada
+  // cosa que se dice llenaría el canal y dejaría la conversación entera guardada.
+  const speech = useSpeech({
+    enabled: voiceOn && myTurn,
+    onPhrase: onSay,
+  });
   const lastSaid = state.said.at(-1) ?? null;
   // Cada ronda cerrada fue una explosión. La que termina la partida no cuenta
   // acá: no incrementa la ronda y además desmonta esta pantalla, así que la
@@ -109,6 +119,39 @@ export function Round({
         ) : (
           <span className="text-neutral-500">Todavía nadie acertó.</span>
         )}
+      </p>
+
+      <div className="flex flex-wrap items-center gap-3 text-xs">
+        <button
+          type="button"
+          onClick={() => setVoiceOn((on) => !on)}
+          disabled={speech.state === "unsupported" || speech.state === "denied"}
+          className="rounded-md border border-black/10 px-3 py-1 disabled:opacity-40 dark:border-white/15"
+        >
+          {voiceOn ? "Apagar micrófono" : "Encender micrófono"}
+        </button>
+        <span className="text-neutral-500">
+          {speech.state === "unsupported"
+            ? "Sin reconocimiento de voz en este navegador"
+            : speech.state === "denied"
+              ? "Micrófono denegado"
+              : speech.state === "listening"
+                ? "Escuchando…"
+                : myTurn
+                  ? "Micrófono apagado"
+                  : "Te toca esperar"}
+        </span>
+        {speech.error && (
+          <span className="text-amber-700 dark:text-amber-400">
+            {speech.error}
+          </span>
+        )}
+      </div>
+
+      {/* Lo que el micrófono está entendiendo ahora. Verlo es lo que permite
+          darse cuenta de que escuchó mal, en vez de creer que el juego falla. */}
+      <p className="min-h-6 font-mono text-xs text-neutral-500">
+        {speech.interim || (speech.state === "listening" ? "…" : "")}
       </p>
 
       <form
