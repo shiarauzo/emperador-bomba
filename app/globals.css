@@ -61,5 +61,11 @@ body {
    * Sin movimiento, pero la mecha sigue avanzando: es información del juego, no
    * decoración. Se mantiene lineal y se le quitan la sacudida y el estallido.
    */
-  .bomb-tense, .bomb-blast { animation: none !important; }
+  .bomb-tense { animation: none !important; }
+  /*
+   * El estallido se oculta solo gracias al `forwards` de su animación. Con
+   * `animation: none` volvía a su estilo base y quedaba un 💥 opaco encima de la
+   * bomba para siempre, desde la segunda ronda en adelante.
+   */
+  .bomb-blast { animation: none !important; opacity: 0 !important; }
 }

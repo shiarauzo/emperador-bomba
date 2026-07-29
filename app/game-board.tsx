@@ -197,6 +197,11 @@ export function GameBoard() {
     return (
       <div className="m-auto flex w-full max-w-sm flex-col gap-4 p-6 text-center">
         {banner}
+        {/* La explosión que termina la partida no la ve la pantalla de juego:
+            esa ya se desmontó. Se anima acá, que es donde aterriza. */}
+        <span aria-hidden className="bomb-blast text-5xl">
+          💥
+        </span>
         <h1 className="font-mono text-lg font-semibold tracking-tight">
           {outcome}
         </h1>
@@ -226,7 +231,6 @@ export function GameBoard() {
         state={state}
         movie={movie}
         meId={me?.id}
-        now={now}
         pending={pending}
         onSay={(text) => void publish({ kind: "say", text })}
       />
