@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { GameState, Movie, SaidQuote } from "@/lib/engine/types";
+import { Bomb } from "./bomb";
 
 function quoteText(movie: Movie | null, quoteId: string): string {
   return movie?.quotes.find((quote) => quote.id === quoteId)?.text ?? quoteId;
@@ -38,14 +39,12 @@ export function Round({
   state,
   movie,
   meId,
-  now,
   pending,
   onSay,
 }: {
   state: GameState;
   movie: Movie | null;
   meId: string | undefined;
-  now: number;
   pending: boolean;
   onSay: (text: string) => void;
 }) {
@@ -53,7 +52,10 @@ export function Round({
 
   const myTurn = state.turnOf === meId;
   const lastSaid = state.said.at(-1) ?? null;
-  const elapsed = state.fuse ? Math.max(0, now - state.fuse.openedAt) : 0;
+  // Cada ronda cerrada fue una explosión. La que termina la partida no cuenta
+  // acá: no incrementa la ronda y además desmonta esta pantalla, así que la
+  // anima el final de partida.
+  const explosions = state.round - 1;
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-5 p-6">
@@ -61,12 +63,16 @@ export function Round({
         <h1 className="font-mono text-base font-semibold tracking-tight">
           {movie?.title}
         </h1>
-        {/* Tiempo transcurrido, nunca el restante: la duración de la mecha es
-            oculta por diseño y mostrar la cuenta atrás la revelaría. */}
+        {/* Sólo el número de ronda. El contador de segundos que había acá, junto
+            a la marca de la zona de peligro, dejaba calcular al segundo cuánto
+            faltaba para que la explosión fuera posible. La barra da la misma
+            sensación sin dar el número. */}
         <span className="font-mono text-sm tabular-nums text-neutral-500">
-          ronda {state.round} · {Math.floor(elapsed / 1000)}s ardiendo
+          ronda {state.round}
         </span>
       </header>
+
+      {state.fuse && <Bomb fuse={state.fuse} explosions={explosions} />}
 
       <ul className="flex gap-3">
         {state.players.map((player) => (

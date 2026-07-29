@@ -55,7 +55,11 @@ export function GameBoard() {
     isLoadingPrevious,
     loadPrevious,
     messages,
-    enabled: channelId !== undefined,
+    // El servidor y la primera pasada del cliente comparten el mismo snapshot
+    // inerte, en el que `status` es "idle". Atar esto al id del canal en cambio
+    // rompía la hidratación: el id es `undefined` en el servidor y una cadena en
+    // el cliente, así que cada lado renderizaba una pantalla distinta.
+    enabled: status !== "idle",
   });
 
   const events = useMemo(() => toGameEvents(messages), [messages]);
@@ -193,6 +197,11 @@ export function GameBoard() {
     return (
       <div className="m-auto flex w-full max-w-sm flex-col gap-4 p-6 text-center">
         {banner}
+        {/* La explosión que termina la partida no la ve la pantalla de juego:
+            esa ya se desmontó. Se anima acá, que es donde aterriza. */}
+        <span aria-hidden className="bomb-blast text-5xl">
+          💥
+        </span>
         <h1 className="font-mono text-lg font-semibold tracking-tight">
           {outcome}
         </h1>
@@ -222,7 +231,6 @@ export function GameBoard() {
         state={state}
         movie={movie}
         meId={me?.id}
-        now={now}
         pending={pending}
         onSay={(text) => void publish({ kind: "say", text })}
       />

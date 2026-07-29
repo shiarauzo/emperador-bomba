@@ -24,3 +24,48 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/*
+ * La mecha se anima con CSS, no con React.
+ *
+ * El ticker corre a 200 ms y eso se vería a saltos. Acá la animación arranca una
+ * sola vez por ronda con un retraso negativo igual al tiempo que ya lleva
+ * ardiendo: el navegador la interpola a 60 fps y las dos pantallas quedan en la
+ * misma posición porque las dos calculan ese retraso contra la misma marca de
+ * tiempo del servidor.
+ */
+@keyframes fuse-burn {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* Sacude la bomba una vez entrada la zona en la que ya puede reventar. */
+@keyframes bomb-tense {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  25%      { transform: translate(-1px, 1px) rotate(-1.5deg); }
+  75%      { transform: translate(1px, -1px) rotate(1.5deg); }
+}
+
+/* La clase la aplica el nodo del estallido; la animación va en el CSS para que
+   remontar el nodo la reproduzca desde cero. */
+.bomb-blast { animation: bomb-blast 900ms ease-out forwards; }
+
+@keyframes bomb-blast {
+  0%   { transform: scale(0.4); opacity: 1; }
+  60%  { transform: scale(1.8); opacity: 0.85; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /*
+   * Sin movimiento, pero la mecha sigue avanzando: es información del juego, no
+   * decoración. Se mantiene lineal y se le quitan la sacudida y el estallido.
+   */
+  .bomb-tense { animation: none !important; }
+  /*
+   * El estallido se oculta solo gracias al `forwards` de su animación. Con
+   * `animation: none` volvía a su estilo base y quedaba un 💥 opaco encima de la
+   * bomba para siempre, desde la segunda ronda en adelante.
+   */
+  .bomb-blast { animation: none !important; opacity: 0 !important; }
+}
