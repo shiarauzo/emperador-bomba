@@ -14,8 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Portal realtime demo",
-  description: "Live chat, presence, and typing indicators powered by Portal.",
+  title: "Las locuras del emperador — bomba",
+  description:
+    "Juego de voz por turnos: citá frases de la película antes de que te explote la bomba.",
 };
 
 export default function RootLayout({
