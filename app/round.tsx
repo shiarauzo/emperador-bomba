@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { GameState, Movie, SaidQuote } from "@/lib/engine/types";
+import { Bomb } from "./bomb";
 
 function quoteText(movie: Movie | null, quoteId: string): string {
   return movie?.quotes.find((quote) => quote.id === quoteId)?.text ?? quoteId;
@@ -54,6 +55,8 @@ export function Round({
   const myTurn = state.turnOf === meId;
   const lastSaid = state.said.at(-1) ?? null;
   const elapsed = state.fuse ? Math.max(0, now - state.fuse.openedAt) : 0;
+  // Cada ronda cerrada fue una explosión, más la que terminó la partida.
+  const explosions = state.round - 1;
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-5 p-6">
@@ -67,6 +70,8 @@ export function Round({
           ronda {state.round} · {Math.floor(elapsed / 1000)}s ardiendo
         </span>
       </header>
+
+      {state.fuse && <Bomb fuse={state.fuse} explosions={explosions} />}
 
       <ul className="flex gap-3">
         {state.players.map((player) => (

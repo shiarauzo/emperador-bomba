@@ -55,7 +55,11 @@ export function GameBoard() {
     isLoadingPrevious,
     loadPrevious,
     messages,
-    enabled: channelId !== undefined,
+    // El servidor y la primera pasada del cliente comparten el mismo snapshot
+    // inerte, en el que `status` es "idle". Atar esto al id del canal en cambio
+    // rompía la hidratación: el id es `undefined` en el servidor y una cadena en
+    // el cliente, así que cada lado renderizaba una pantalla distinta.
+    enabled: status !== "idle",
   });
 
   const events = useMemo(() => toGameEvents(messages), [messages]);

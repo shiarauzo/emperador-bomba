@@ -226,6 +226,33 @@ describe("la explosión", () => {
     expect(state.round).toBe(2);
   });
 
+  it("la segunda explosión se descarta aunque llegue mucho después, no por milisegundos", () => {
+    // A 5 ms de distancia el descarte podría ser casualidad de reloj. Acá la
+    // segunda llega treinta segundos más tarde y se descarta igual, porque se
+    // evalúa contra la mecha que abrió la primera — todavía fresca.
+    const start = opened();
+    const primera = event(A, { kind: "boom" }, START_FUSE);
+    const segunda = event(B, { kind: "boom" }, START_FUSE + 30_000);
+
+    const state = deriveGameState([start, primera, segunda], START_FUSE + 30_000, CATALOG);
+
+    expect(state.lives).toEqual({ [A]: 2, [B]: 3 });
+    expect(state.round).toBe(2);
+    // Y la ronda nueva sigue anclada a la primera, no a la rezagada.
+    expect(state.fuse?.openedAt).toBe(START_FUSE);
+  });
+
+  it("el desempate no depende del orden de llegada, sólo del seq", () => {
+    const start = opened();
+    const primera = event(A, { kind: "boom" }, START_FUSE);
+    const segunda = event(B, { kind: "boom" }, START_FUSE + 5);
+
+    const enOrden = deriveGameState([start, primera, segunda], START_FUSE + 5, CATALOG);
+    const alReves = deriveGameState([segunda, primera, start], START_FUSE + 5, CATALOG);
+
+    expect(alReves).toEqual(enOrden);
+  });
+
   it("las frases usadas no se reinician entre rondas", () => {
     const events = [
       opened(),
